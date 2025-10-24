@@ -1,0 +1,12 @@
+.container {
+  text-align: left;
+}
+
+.matched {
+  background-color: yellow;
+}
+
+.matchStats {
+  font-size: 1vh;
+  color: #666;
+}
