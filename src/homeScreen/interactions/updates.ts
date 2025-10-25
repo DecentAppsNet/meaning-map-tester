@@ -1,5 +1,5 @@
 import { assertNonNullable, infoToast } from 'decent-portal';
-import { makeUtteranceReplacements, MeaningMap } from 'meaning-map';
+import { makeUtteranceReplacements, MeaningMap, isPlainUtterance } from 'meaning-map';
 
 import Session from '@/persistence/types/Session';
 import { saveSession } from '@/persistence/session';
@@ -8,7 +8,7 @@ export async function updateMatchText(matchText:string, session:Session|null, se
     setReplacedMatchText:Function, meaningMap:MeaningMap|null) {
   assertNonNullable(session);
   const nextSession = {...session, matchText};
-  if (meaningMap && matchText.length) {
+  if (meaningMap && matchText.length && isPlainUtterance(matchText)) {
     const [replacedText] = await makeUtteranceReplacements(matchText, meaningMap.replacers);
     setReplacedMatchText(replacedText);
   }

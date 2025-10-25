@@ -40,12 +40,14 @@ function HomeScreen() {
   return (
     <div className={styles.container}>
       <TopBar />
-      <MeaningMapInput 
-          meaningMapText={session?.meaningMapText ?? ''} 
-          onCreateMeaningMap={(nextMeaningMap, meaningMapText) => 
-            updatingMeaningMap(nextMeaningMap, meaningMapText, setMeaningMap, session, setSession)}
-          onBusyStatus={setIsMeaningMapLoading}
-      />
+      <div className={styles.side}>
+        <MeaningMapInput 
+            meaningMapText={session?.meaningMapText ?? ''} 
+            onCreateMeaningMap={(nextMeaningMap, meaningMapText) => 
+              updatingMeaningMap(nextMeaningMap, meaningMapText, setMeaningMap, session, setSession)}
+            onBusyStatus={setIsMeaningMapLoading}
+        />
+      </div>
       <div className={styles.content}>
         <MatchTextInput onChange={(nextMatchText) => updateMatchText(nextMatchText, session, setSession, setReplacedMatchText, meaningMap)} />
         <p className={styles.replacedText}>Replaced: {replacedMatchText}</p>
