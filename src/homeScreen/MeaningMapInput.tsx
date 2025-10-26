@@ -28,7 +28,6 @@ export default function MeaningMapInput({ meaningMapText, onCreateMeaningMap, on
   const [isBusy, setIsBusy] = useState<boolean>(false);
 
   function _updateStatus(nextIsBusy:boolean) {
-    if (isBusy === nextIsBusy) return;
     setIsBusy(nextIsBusy);
     onBusyStatus(nextIsBusy);
   }
