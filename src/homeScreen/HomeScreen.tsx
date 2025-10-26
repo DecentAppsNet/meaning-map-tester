@@ -17,6 +17,7 @@ function HomeScreen() {
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [isMeaningMapLoading, setIsMeaningMapLoading] = useState<boolean>(true);
   const [replacedMatchText, setReplacedMatchText] = useState<string>('');
+  const [paramsText, setParamsText] = useState<string>('');
   
   useEffect(() => {
     if (session || isLoading) return;
@@ -49,8 +50,9 @@ function HomeScreen() {
         />
       </div>
       <div className={styles.content}>
-        <MatchTextInput onChange={(nextMatchText) => updateMatchText(nextMatchText, session, setSession, setReplacedMatchText, meaningMap)} />
-        <p className={styles.replacedText}>Replaced: {replacedMatchText}</p>
+        <MatchTextInput onChange={(nextMatchText) => updateMatchText(nextMatchText, session, setSession, setReplacedMatchText, setParamsText, meaningMap)} />
+        <p className={styles.replacedText}>With replacements: {replacedMatchText}</p>
+        <p className={styles.paramsText}>Params: {paramsText}</p>
         {meaningMapContent}
       </div>
     </div>

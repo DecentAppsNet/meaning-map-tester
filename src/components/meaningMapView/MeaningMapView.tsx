@@ -1,4 +1,4 @@
-import { matchMeaningWithStats, MeaningMap, MeaningMatch } from 'meaning-map';
+import { isPlainUtterance, matchMeaningWithStats, MeaningMap, MeaningMatch } from 'meaning-map';
 import { useState, useEffect } from 'react';
 
 import styles from './MeaningMapView.module.css';
@@ -14,7 +14,7 @@ function MeaningMapView({meaningMap, matchText}:Props) {
 
   useEffect(() => {
     setMeaningMatch(null);
-    if (matchText === '') return;
+    if (matchText === '' || !isPlainUtterance(matchText)) return;
     matchMeaningWithStats(matchText.toLowerCase(), meaningMap).then(setMeaningMatch);
   }, [meaningMap, matchText]);
 
