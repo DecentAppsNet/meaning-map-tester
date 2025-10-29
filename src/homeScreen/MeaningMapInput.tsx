@@ -1,12 +1,8 @@
 import { useEffect, useState } from 'react';
-import { MeaningMap, loadMeaningMap } from 'meaning-map';
 
 import styles from './MeaningMapInput.module.css';
 import ContentButton from '../components/contentButton/ContentButton';
-import { errorToast } from 'decent-portal';
-
-export type CreateMeaningMapCallback = (meaningMap:MeaningMap, meaningMapText:string) => void;
-export type BusyStatusCallback = (isBusy:boolean) => void;
+import { BusyStatusCallback, CreateMeaningMapCallback, createMeaningMapFromText, exportMeaningMapToClipboard } from './interactions/export';
 
 type Props = {
   meaningMapText?:string;
@@ -14,27 +10,17 @@ type Props = {
   onCreateMeaningMap:CreateMeaningMapCallback;
 };
 
-async function _createMeaningMapFromText(text:string, onCreateMeaningMap:CreateMeaningMapCallback) {
-  try {
-    const meaningMap = await loadMeaningMap(text);
-    onCreateMeaningMap(meaningMap, text);
-  } catch(err) {
-    console.log(err);
-  }
-}
-
 export default function MeaningMapInput({ meaningMapText, onCreateMeaningMap, onBusyStatus }:Props) {
   const [text, setText] = useState<string>(meaningMapText ?? '');
   const [isBusy, setIsBusy] = useState<boolean>(false);
-
-  function _updateStatus(nextIsBusy:boolean) {
-    setIsBusy(nextIsBusy);
-    onBusyStatus(nextIsBusy);
-  }
    
   useEffect(() => {
     setText(meaningMapText ?? '');
   }, [meaningMapText]);
+
+  useEffect(() => {
+    onBusyStatus(isBusy);
+  }, [isBusy, onBusyStatus]);
 
   return (
     <div className={styles.container}>
@@ -48,17 +34,13 @@ export default function MeaningMapInput({ meaningMapText, onCreateMeaningMap, on
       />
       <ContentButton
         text="Load"
-        onClick={() => {
-          _updateStatus(true);
-          try {
-            _createMeaningMapFromText(text, onCreateMeaningMap)
-          } catch(err) {
-            errorToast(`Error loading meaning map: ${err}`);
-          } finally {
-            _updateStatus(false);
-          }
-        }}
-        disabled={isBusy}
+        onClick={() => createMeaningMapFromText(text, onCreateMeaningMap, setIsBusy)}
+        disabled={isBusy || !text.length}
+      />
+      <ContentButton
+        text="Copy to Clipboard"
+        onClick={() => exportMeaningMapToClipboard(text, onCreateMeaningMap, setIsBusy)}
+        disabled={isBusy || !text.length}
       />
     </div>
   );
