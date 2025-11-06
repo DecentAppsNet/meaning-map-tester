@@ -10,6 +10,8 @@ import MeaningMapInput from "./MeaningMapInput";
 import MatchTextInput from "./MatchTextInput";
 import Session from '@/persistence/types/Session';
 import { updateMatchText, updatingMeaningMap } from "./interactions/updates";
+import ContentButton from "@/components/contentButton/ContentButton";
+import { enableSpeechToText } from "@/speech/speechToTextUtil";
 
 function HomeScreen() {
   const [meaningMap, setMeaningMap] = useState<MeaningMap|null>(null);
@@ -53,6 +55,7 @@ function HomeScreen() {
         <MatchTextInput onChange={(nextMatchText) => updateMatchText(nextMatchText, session, setSession, setReplacedMatchText, setParamsText, meaningMap)} />
         <p className={styles.replacedText}>With replacements: {replacedMatchText}</p>
         <p className={styles.paramsText}>Params: {paramsText}</p>
+        <ContentButton text="Speech Input" onClick={() => {enableSpeechToText();}} />
         {meaningMapContent}
       </div>
     </div>

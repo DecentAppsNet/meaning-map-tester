@@ -1,6 +1,7 @@
 import Session from '@/persistence/types/Session';
 import { getSession } from "@/persistence/session";
 import { loadMeaningMap, MeaningMap } from 'meaning-map';
+import { initSpeechToText } from '@/speech/speechToTextUtil';
 
 let isInitialized = false;
 let isInitializing = false;
@@ -27,6 +28,7 @@ export async function init():Promise<InitResults|null> {
 
     const session = await getSession();
     const meaningMap = await _loadMeaningMap(session.meaningMapText);
+    await initSpeechToText((text) => console.log(text));
 
     isInitialized = true;
     return { session, meaningMap };
