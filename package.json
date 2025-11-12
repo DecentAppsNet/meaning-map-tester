@@ -18,7 +18,7 @@
     "decent-portal": "^2.4.7",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "sl-web-audio": "^1.0.4"
+    "sl-web-audio": "^1.0.5"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.27",
