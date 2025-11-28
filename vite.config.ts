@@ -21,8 +21,7 @@ export default defineConfig(({mode}) => {
       chunkSizeWarningLimit: 7000,
     },
     test: {
-      environment: 'node',
-      globals: true
+      environment: 'node'
     }
   };
 });

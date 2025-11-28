@@ -13,22 +13,18 @@ let theState:State|null = null;
 
 function _onReceiveAudio(samples:Float32Array, _sampleRate:number) {
   if (!theState) return;
-  theState.speechDetector.addAudioChunkToBuffer(samples);
+  theState.speechDetector.processAudioSamples(samples);
 }
 
 export async function initSpeechToText(onReceiveText:ReceiveTextCallback) {
   if (theState) return;
   const microphone = new Microphone(_onReceiveAudio);
   await microphone.init();
-  const speechDetector = new SpeechDetector(microphone.sampleRate, microphone.bufferSize, {
+  const speechDetector = new SpeechDetector(microphone.sampleRate, {
     onSilence:() => {console.log('silence ' + performance.now());},
     onSpeech:() => {console.log('speech ' + performance.now());},
   });
-  theState = {
-    microphone,
-    speechDetector,
-    onReceiveText
-  };
+  theState = { microphone, speechDetector, onReceiveText};
 }
 
 export function enableSpeechToText() {
