@@ -17,6 +17,7 @@ export type SilenceCallback = (precedingSpeechSamples:Float32Array) => void;
 
 export type SpeechDetectorOptions = {
   detectSilenceDelayMSecs:number,
+  detectSpeechDelayMSecs:number,
   frameDurationMSecs:number,
   speechThresholdMultiplier:number,
   onSpeech:SpeechCallback|null,
@@ -24,9 +25,10 @@ export type SpeechDetectorOptions = {
 };
 
 const DEFAULT_OPTIONS:SpeechDetectorOptions = {
-  detectSilenceDelayMSecs: 500,
+  detectSilenceDelayMSecs: 1000,
+  detectSpeechDelayMSecs: 40,
   frameDurationMSecs: 20,
-  speechThresholdMultiplier: 2.5,
+  speechThresholdMultiplier: 20,
   onSpeech: null,
   onSilence: null
 };
@@ -38,15 +40,18 @@ function _moveNoiseFloor(frameEnergy:number, currentNoiseFloor:number, minNoiseF
 }
 
 const UNSPECIFIED_NOISE_FLOOR = 0;
+const UNSPECIFIED_TIME = -1;
 
 class SpeechDetector {
   _sampleRate:number;
   _noiseFloor:number;
   _onSpeech:SpeechCallback|null;
   _onSilence:SilenceCallback|null;
+  _detectSpeechDelayMSecs:number;
   _detectSilenceDelayMSecs:number;
   _isInSpeech:boolean;
   _startSilenceTime:number;
+  _startSpeechTime:number;
   _frameSampleCount:number;
   _speechThresholdMultiplier:number;
   _minNoiseFloor:number;
@@ -58,12 +63,14 @@ class SpeechDetector {
     this._onSpeech = options.onSpeech!;
     this._onSilence = options.onSilence!;
     this._detectSilenceDelayMSecs = options.detectSilenceDelayMSecs!;
+    this._detectSpeechDelayMSecs = options.detectSpeechDelayMSecs!;
     const frameDurationMSecs = options.frameDurationMSecs!;
     this._speechThresholdMultiplier = options.speechThresholdMultiplier!;
     this._sampleRate = sampleRate;
     this._noiseFloor = UNSPECIFIED_NOISE_FLOOR;
     this._isInSpeech = false;
-    this._startSilenceTime = -1;
+    this._startSilenceTime = UNSPECIFIED_TIME;
+    this._startSpeechTime = UNSPECIFIED_TIME;
     this._frameSampleCount = mSecsToSampleCount(frameDurationMSecs, sampleRate);
     this._minNoiseFloor = 1 / sampleRate;
     if (this._frameSampleCount % 2 === 1) ++this._frameSampleCount; // Make it even so that frame hops can be half.
@@ -85,30 +92,34 @@ class SpeechDetector {
       const frameEnergy = this._circularFrameBuffer.calcFrameEnergy();
       this._processedSampleCount = this._processedSampleCount === 0 ? this._frameSampleCount : this._processedSampleCount + this._circularFrameBuffer.hopSampleCount;
       
-      this._noiseFloor = _moveNoiseFloor(frameEnergy, this._noiseFloor, this._minNoiseFloor);
+      if (!this._isInSpeech) this._noiseFloor = _moveNoiseFloor(frameEnergy, this._noiseFloor, this._minNoiseFloor);
       const speechThreshold = this._noiseFloor * this._speechThresholdMultiplier;
       const isFrameAboveSpeechThreshold = frameEnergy > speechThreshold;
       
       if (isFrameAboveSpeechThreshold) {
+        this._startSilenceTime = UNSPECIFIED_TIME;
         if (!this._isInSpeech) {
-          this._isInSpeech = true;
-          if (this._onSpeech) this._onSpeech();
+          const now = sampleCountToMSecs(this._processedSampleCount - this._frameSampleCount, this._sampleRate);
+          if (this._startSpeechTime === UNSPECIFIED_TIME) this._startSpeechTime = now;
+          const speechDurationMSecs = now - this._startSpeechTime;
+          if (speechDurationMSecs >= this._detectSpeechDelayMSecs) {
+            this._isInSpeech = true;
+            this._startSpeechTime = UNSPECIFIED_TIME;
+            if (this._onSpeech) this._onSpeech();
+          }
         }
-        this._startSilenceTime = -1;
       } else {
+        this._startSpeechTime = UNSPECIFIED_TIME;
         if (this._isInSpeech) {
           const now = sampleCountToMSecs(this._processedSampleCount - this._frameSampleCount, this._sampleRate);
-          if (this._startSilenceTime === -1) {
-            this._startSilenceTime = now;
-          } else {
-            const silenceDurationMSecs = now - this._startSilenceTime;
-            if (silenceDurationMSecs >= this._detectSilenceDelayMSecs) {
-              this._isInSpeech = false;
-              this._startSilenceTime = -1;
-              if (this._onSilence) {
-                const precedingSpeechSamples = new Float32Array(0); // TODO: Buffer preceding speech samples.
-                this._onSilence(precedingSpeechSamples);
-              }
+          if (this._startSilenceTime === -1) this._startSilenceTime = now;
+          const silenceDurationMSecs = now - this._startSilenceTime;
+          if (silenceDurationMSecs >= this._detectSilenceDelayMSecs) {
+            this._isInSpeech = false;
+            this._startSilenceTime = UNSPECIFIED_TIME;
+            if (this._onSilence) {
+              const precedingSpeechSamples = new Float32Array(0); // TODO: Buffer preceding speech samples.
+              this._onSilence(precedingSpeechSamples);
             }
           }
         }

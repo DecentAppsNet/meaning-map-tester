@@ -58,7 +58,7 @@ describe('SpeechDetector', () => {
     it('detects speech after a period of flatness followed by a spike', () => {
       let speechFired = false;
       function onSpeech() { speechFired = true; }
-      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, onSpeech});
+      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, detectSpeechDelayMSecs: 0, onSpeech});
       sd.processAudioSamples(new Float32Array([1,1,10,10]));
       expect(speechFired).toBeTruthy();
     });
@@ -66,7 +66,7 @@ describe('SpeechDetector', () => {
     it('does not detect speech for a period of flatness', () => {
       let speechFired = false;
       function onSpeech() { speechFired = true; }
-      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, onSpeech});
+      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, detectSpeechDelayMSecs: 0,onSpeech});
       sd.processAudioSamples(new Float32Array([1,1,1,1,1,1,1,1]));
       expect(speechFired).toBeFalsy();
     });
@@ -74,7 +74,7 @@ describe('SpeechDetector', () => {
     it('slowly rising power in samples does not trigger speech event', () => {
       let speechFired = false;
       function onSpeech() { speechFired = true; }
-      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, onSpeech});
+      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, detectSpeechDelayMSecs: 0,onSpeech});
       sd.processAudioSamples(new Float32Array([1, 1, 1.1, 1.1, 1.2, 1.2, 1.3, 1.3, 1.4, 1.4, 1.5, 1.5, 1.6, 1.6]));
       expect(speechFired).toBeFalsy();
     });
@@ -82,8 +82,24 @@ describe('SpeechDetector', () => {
     it('quickly rising power in samples does trigger speech event', () => {
       let speechFired = false;
       function onSpeech() { speechFired = true; }
-      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, onSpeech});
+      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, detectSpeechDelayMSecs: 0, onSpeech});
       sd.processAudioSamples(new Float32Array([1, 1, 1.6, 1.6]));
+      expect(speechFired).toBeTruthy();
+    });
+
+    it('does not detect speech when power spike is above threshold but too short', () => {
+      let speechFired = false;
+      function onSpeech() { speechFired = true; }
+      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, detectSpeechDelayMSecs: 20, onSpeech});
+      sd.processAudioSamples(new Float32Array([1,1,10,10]));
+      expect(speechFired).toBeFalsy();
+    });
+
+    it('detects speech when power spike is above threshold over duration of speech delay', () => {
+      let speechFired = false;
+      function onSpeech() { speechFired = true; }
+      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, detectSpeechDelayMSecs: 20, onSpeech});
+      sd.processAudioSamples(new Float32Array([1,1,10,10,10]));
       expect(speechFired).toBeTruthy();
     });
   });
@@ -93,7 +109,7 @@ describe('SpeechDetector', () => {
       let speechFireCount = 0, silenceFireCount = 0;
       function onSpeech() { speechFireCount++; }
       function onSilence() { silenceFireCount++; }
-      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, detectSilenceDelayMSecs: 20, onSpeech, onSilence});
+      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, detectSilenceDelayMSecs: 20, detectSpeechDelayMSecs: 0, onSpeech, onSilence});
       sd.processAudioSamples(new Float32Array([1,1,10,10])); // initial silence followed by speech
       expect(silenceFireCount).toEqual(0);
       expect(speechFireCount).toEqual(1);
@@ -109,7 +125,7 @@ describe('SpeechDetector', () => {
       let speechFireCount = 0, silenceFireCount = 0;
       function onSpeech() { speechFireCount++; }
       function onSilence() { silenceFireCount++; }
-      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, detectSilenceDelayMSecs: 20, onSpeech, onSilence});
+      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, detectSilenceDelayMSecs: 20, detectSpeechDelayMSecs: 0, onSpeech, onSilence});
       sd.processAudioSamples(new Float32Array([1,1,10,10])); // initial silence followed by speech
       expect(silenceFireCount).toEqual(0);
       expect(speechFireCount).toEqual(1);
