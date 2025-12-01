@@ -11,43 +11,45 @@ function _calcEnergyOverRange(samples:Float32Array, fromI:number, toI:number):nu
 
 class CircularFrameBuffer {
   private _buffer:Float32Array;
-  private _startFramePos:number;
-  private _writePos:number;
+  private _startFrameSampleNo:number;
+  private _firstAvailableSampleNo:number;
+  private _writeSampleNo:number;
   private _frameSampleCount:number;
   private _hopSampleCount:number;
-  private _availableSampleCount:number;
+
+  _sampleNoToPos(sampleNo:number) { return sampleNo % this._buffer.length; }
   
-  constructor(frameSampleCount:number) {
+  constructor(frameSampleCount:number, totalSampleCount:number = 0) {
     if (frameSampleCount <= 1) throw Error('Frame sample count must by >1.');
     if (frameSampleCount % 2 !== 0) throw Error('Frame sample count must be even.');
-    this._buffer = new Float32Array(frameSampleCount * 2);
-    this._startFramePos = 0;
-    this._writePos = 0;
+    if (totalSampleCount < frameSampleCount * 2) totalSampleCount = frameSampleCount * 2;
+    this._buffer = new Float32Array(totalSampleCount);
+    this._startFrameSampleNo = this._firstAvailableSampleNo = this._writeSampleNo = 0;
     this._frameSampleCount = Math.floor(frameSampleCount); // Make sure it's an integer.
     this._hopSampleCount = this._frameSampleCount >> 1;
-    this._availableSampleCount = 0;
   }
 
-  public addSamples(samples:Float32Array, fromPos:number, sampleCount:number):void {
-    if (sampleCount > this._buffer.length - this._availableSampleCount) throw new Error('not enough space in buffer to add samples');
-    if (this._writePos + sampleCount <= this._buffer.length) {
-      this._buffer.set(samples.subarray(fromPos, fromPos + sampleCount), this._writePos);
-      this._writePos += sampleCount;
-      if (this._writePos === this._buffer.length) this._writePos = 0;
-      assert(this._writePos < this._buffer.length);
+  public addSamples(samples:Float32Array, fromPos:number, sampleCount:number):void { 
+    if (sampleCount > this.availableWriteSpace) throw new Error('not enough space in buffer to add samples');
+    const writePos = this._sampleNoToPos(this._writeSampleNo);
+    if (writePos + sampleCount <= this._buffer.length) {
+      this._buffer.set(samples.subarray(fromPos, fromPos + sampleCount), writePos);
     } else {
-      const firstPartLength = this._buffer.length - this._writePos;
-      this._buffer.set(samples.subarray(fromPos, firstPartLength), this._writePos);
-      const secondPartLength = Math.min(sampleCount - firstPartLength, this._startFramePos);
-      this._buffer.set(samples.subarray(fromPos + firstPartLength, secondPartLength), 0);
-      this._writePos = secondPartLength;
+      const firstPartLength = this._buffer.length - writePos;
+      this._buffer.set(samples.subarray(fromPos, fromPos + firstPartLength), writePos);
+      const secondPartPos = fromPos + firstPartLength; 
+      const secondPartLength = Math.min(sampleCount - firstPartLength, this._sampleNoToPos(this._startFrameSampleNo));
+      this._buffer.set(samples.subarray(secondPartPos, secondPartPos + secondPartLength), 0);
     }
-    this._availableSampleCount += sampleCount;
+    this._writeSampleNo += sampleCount;
+    const availableSampleCount = this._writeSampleNo - this._firstAvailableSampleNo;
+    if (availableSampleCount > this._buffer.length) this._firstAvailableSampleNo += (availableSampleCount - this._buffer.length);
+    assert(this._firstAvailableSampleNo <= this._writeSampleNo);
   }
 
   public calcFrameEnergy():number {
-    if (this._availableSampleCount < this._frameSampleCount) throw new Error('no frame available');
-    let frameStartPos = this._startFramePos;
+    if (this.availableFrameSampleCount < this._frameSampleCount) throw new Error('no frame available');
+    let frameStartPos = this._sampleNoToPos(this._startFrameSampleNo);
     const rolledOver = frameStartPos + this._frameSampleCount > this._buffer.length;
     let frameEndPos = rolledOver ? this._buffer.length : frameStartPos + this._frameSampleCount;
     let energy = _calcEnergyOverRange(this._buffer, frameStartPos, frameEndPos);
@@ -58,17 +60,37 @@ class CircularFrameBuffer {
   }
 
   public hop():void {
-    if (this._availableSampleCount < this._hopSampleCount) throw new Error('not enough samples to hop');
-    this._startFramePos += this._hopSampleCount;
-    if (this._startFramePos >= this._buffer.length) this._startFramePos -= this._buffer.length;
-    this._availableSampleCount -= this._hopSampleCount;
+    if (this.availableFrameSampleCount < this._hopSampleCount) throw new Error('not enough samples to hop');
+    this._startFrameSampleNo += this._hopSampleCount;
+  }
+
+  _clampSampleNoToAvailable(sampleNo:number):number {
+    if (sampleNo <= this._firstAvailableSampleNo) return this._firstAvailableSampleNo;
+    if (sampleNo > this._writeSampleNo) return this._writeSampleNo;
+    return sampleNo;
+  }
+
+  public copySamples(fromSampleNo:number, toSampleNo:number):Float32Array {
+    assert(fromSampleNo <= toSampleNo);
+    fromSampleNo = this._clampSampleNoToAvailable(fromSampleNo);
+    toSampleNo = this._clampSampleNoToAvailable(toSampleNo);
+    if (fromSampleNo === toSampleNo) return new Float32Array([]);
+    const fromPos = this._sampleNoToPos(fromSampleNo);
+    const toPos = this._sampleNoToPos(toSampleNo);
+    if (fromPos < toPos) return this._buffer.subarray(fromPos, toPos);
+    const copyArray = new Float32Array(toSampleNo - fromSampleNo);
+    const firstPartLength = this._buffer.length - fromPos;
+    copyArray.set(this._buffer.subarray(fromPos, this._buffer.length), 0);
+    const secondPartLength = toPos;
+    copyArray.set(this._buffer.subarray(0, secondPartLength), firstPartLength);
+    return copyArray;
   }
 
   public get hopSampleCount():number { return this._hopSampleCount; }
-  public get availableSampleCount():number { return this._availableSampleCount; }
-  public get availableSpaceCount():number { return this._buffer.length - this._availableSampleCount; }
-  public get neededSampleCountForFrame():number { return Math.max(this._frameSampleCount - this._availableSampleCount, 0); } 
-  public get isFrameAvailable():boolean { return this._availableSampleCount >= this._frameSampleCount; }
+  public get availableFrameSampleCount():number { return this._writeSampleNo - this._startFrameSampleNo; }
+  public get availableWriteSpace():number { return this._buffer.length - this.availableFrameSampleCount; } 
+  public get isFrameAvailable():boolean { return this.availableFrameSampleCount >= this._frameSampleCount; }
+  public get frameSampleNo():number { return this._startFrameSampleNo; }
 }
 
 export default CircularFrameBuffer;

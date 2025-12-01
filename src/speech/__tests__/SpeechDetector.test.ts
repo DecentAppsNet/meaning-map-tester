@@ -10,6 +10,11 @@ describe('SpeechDetector', () => {
       const sd = new SpeechDetector(100);
       expect(sd.noiseFloor).toEqual(0);
     });
+
+    it('constructs okay with values that would create an odd frame size', () => {
+      const sd = new SpeechDetector(501, {frameDurationMSecs: 1});
+      expect(sd).toBeDefined();
+    });
   });
 
   describe('processing samples affecting noise floor', () => {
@@ -66,7 +71,7 @@ describe('SpeechDetector', () => {
     it('does not detect speech for a period of flatness', () => {
       let speechFired = false;
       function onSpeech() { speechFired = true; }
-      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, detectSpeechDelayMSecs: 0,onSpeech});
+      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, detectSpeechDelayMSecs: 0, onSpeech});
       sd.processAudioSamples(new Float32Array([1,1,1,1,1,1,1,1]));
       expect(speechFired).toBeFalsy();
     });
@@ -74,8 +79,8 @@ describe('SpeechDetector', () => {
     it('slowly rising power in samples does not trigger speech event', () => {
       let speechFired = false;
       function onSpeech() { speechFired = true; }
-      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, detectSpeechDelayMSecs: 0,onSpeech});
-      sd.processAudioSamples(new Float32Array([1, 1, 1.1, 1.1, 1.2, 1.2, 1.3, 1.3, 1.4, 1.4, 1.5, 1.5, 1.6, 1.6]));
+      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, detectSpeechDelayMSecs: 0, onSpeech});
+      sd.processAudioSamples(new Float32Array([1, 1.1, 1.1, 1.1, 1.1, 1.2, 1.2, 1.2, 1.2, 1.3, 1.3, 1.3, 1.3, 1.4, 1.4, 1.4, 1.4, 1.5]));
       expect(speechFired).toBeFalsy();
     });
 
@@ -83,7 +88,7 @@ describe('SpeechDetector', () => {
       let speechFired = false;
       function onSpeech() { speechFired = true; }
       const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, detectSpeechDelayMSecs: 0, onSpeech});
-      sd.processAudioSamples(new Float32Array([1, 1, 1.6, 1.6]));
+      sd.processAudioSamples(new Float32Array([1, 1, 1.5, 1.5]));
       expect(speechFired).toBeTruthy();
     });
 
@@ -135,6 +140,17 @@ describe('SpeechDetector', () => {
       sd.processAudioSamples(new Float32Array([10,10])); // speech resumes before 20ms delay.
       expect(silenceFireCount).toEqual(0);
       expect(speechFireCount).toEqual(1);
+    });
+
+    it('provides preceding speech samples to onSilence callback', () => {
+      let receivedSamples:Float32Array|null = null;
+      function onSilence(samples:Float32Array) { receivedSamples = samples; }
+      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, detectSilenceDelayMSecs: 20, detectSpeechDelayMSecs: 0, onSilence});
+      sd.processAudioSamples(new Float32Array([1,1,10,10])); // initial silence followed by speech
+      sd.processAudioSamples(new Float32Array([1,1])); // silence starts
+      sd.processAudioSamples(new Float32Array([1,1])); // silence continues beyond 20ms delay.
+      expect(receivedSamples).not.toBeNull();
+      expect(receivedSamples).toEqual(new Float32Array([1,10,10]));
     });
   });
 });

@@ -37,7 +37,7 @@ describe('CircularFrameBuffer', () => {
 
     it('returns available sample count of zero', () => {
       const cfb = new CircularFrameBuffer(10);
-      expect(cfb.availableSampleCount).toBe(0);
+      expect(cfb.availableFrameSampleCount).toBe(0);
     });
   });
 
@@ -63,10 +63,10 @@ describe('CircularFrameBuffer', () => {
 
     it('adds maximum number of samples that space allows', () => {
       const cfb = new CircularFrameBuffer(4);
-      const addCount = cfb.availableSpaceCount;
+      const addCount = cfb.availableWriteSpace;
       expect(addCount).toEqual(8);
       cfb.addSamples(new Float32Array([0, 0, 0, 0, 0, 0, 0, 0]), 0, 8);
-      expect(cfb.availableSpaceCount).toEqual(0);
+      expect(cfb.availableWriteSpace).toEqual(0);
     });
 
     it('throws when adding more samples than buffer can hold', () => {
@@ -78,16 +78,25 @@ describe('CircularFrameBuffer', () => {
       const cfb = new CircularFrameBuffer(4);
       cfb.addSamples(new Float32Array([0, 0, 0, 0]), 0, 4);
       cfb.addSamples(new Float32Array([0, 0, 0, 0]), 0, 4);
-      expect(cfb.availableSampleCount).toBe(8);
+      expect(cfb.availableFrameSampleCount).toBe(8);
       expect(() => cfb.addSamples(new Float32Array(1), 0, 1)).toThrow();
     });
 
     it('hopping reduces available sample count', () => {
       const cfb = new CircularFrameBuffer(4);
       cfb.addSamples(new Float32Array([0, 0, 0, 0, 0, 0]), 0, 6);
-      expect(cfb.availableSampleCount).toBe(6);
+      expect(cfb.availableFrameSampleCount).toBe(6);
       cfb.hop();
-      expect(cfb.availableSampleCount).toBe(6 - cfb.hopSampleCount);
+      expect(cfb.availableFrameSampleCount).toBe(6 - cfb.hopSampleCount);
+    });
+
+    it('adds samples that wrap around buffer end', () => {
+      const cfb = new CircularFrameBuffer(4, 10);
+      cfb.addSamples(new Float32Array([1,1,1,1, 2,2,2,2]), 0, 8);
+      cfb.hop();
+      cfb.hop();
+      cfb.addSamples(new Float32Array([3,3,3,3]), 0, 4);
+      expect(cfb.copySamples(0, 12)).toEqual(new Float32Array([1,1, 2,2,2,2, 3,3,3,3]));
     });
   });
 
@@ -138,6 +147,18 @@ describe('CircularFrameBuffer', () => {
       expect(energy).toBe(2*2 + 2*2 + 3*3 + 3*3);
     });
 
+    it('increasing size of buffer does not change frame energy calculations', () => {
+      const cfb = new CircularFrameBuffer(4, 50);
+      cfb.addSamples(new Float32Array([1, 1, 1, 1]), 0, 4);
+      cfb.addSamples(new Float32Array([2, 2, 2, 2]), 0, 4);
+      cfb.hop();
+      cfb.hop();
+      cfb.addSamples(new Float32Array([3, 3]), 0, 2);
+      cfb.hop();
+      const energy = cfb.calcFrameEnergy();
+      expect(energy).toBe(2*2 + 2*2 + 3*3 + 3*3);
+    });
+
     it('hops around buffer end', () => {
       const cfb = new CircularFrameBuffer(4);
       cfb.addSamples(new Float32Array([1, 1, 1, 1]), 0, 4);
@@ -149,6 +170,68 @@ describe('CircularFrameBuffer', () => {
       cfb.hop();
       const energy = cfb.calcFrameEnergy();
       expect(energy).toBe(3*3 + 3*3 + 3*3 + 3*3);
+    });
+  });
+
+  describe('copying samples', () => {
+    it('returns an empty buffer', () => {
+      const cfb = new CircularFrameBuffer(4);
+      expect(cfb.copySamples(0,3)).toEqual(new Float32Array([]));
+    });
+
+    it('returns full buffer', () => {
+      const cfb = new CircularFrameBuffer(4);
+      cfb.addSamples(new Float32Array([1, 2, 3, 4]), 0, 4);
+      expect(cfb.copySamples(0,4)).toEqual(new Float32Array([1, 2, 3, 4]));
+    });
+
+    it('returns first sample in buffer', () => {
+      const cfb = new CircularFrameBuffer(4);
+      cfb.addSamples(new Float32Array([1, 2, 3, 4]), 0, 4);
+      expect(cfb.copySamples(0,1)).toEqual(new Float32Array([1]));
+    });
+
+    it('returns last sample in buffer', () => {
+      const cfb = new CircularFrameBuffer(4);
+      cfb.addSamples(new Float32Array([1, 2, 3, 4]), 0, 4);
+      expect(cfb.copySamples(3,4)).toEqual(new Float32Array([4]));
+    });
+
+    it('clamps OOB sample#s', () => {
+      const cfb = new CircularFrameBuffer(4);
+      cfb.addSamples(new Float32Array([1, 2, 3, 4]), 0, 4);
+      expect(cfb.copySamples(-1,1)).toEqual(new Float32Array([1]));
+      expect(cfb.copySamples(3,5)).toEqual(new Float32Array([4]));
+      expect(cfb.copySamples(-10,-1)).toEqual(new Float32Array([]));
+      expect(cfb.copySamples(10,11)).toEqual(new Float32Array([]));
+      expect(cfb.copySamples(-10,10)).toEqual(new Float32Array([1,2,3,4]));
+    });
+
+    it('copies from sample range after frame position has moved', () => {
+      const cfb = new CircularFrameBuffer(2);
+      cfb.addSamples(new Float32Array([1, 2, 3, 4]), 0, 4);
+      cfb.hop();
+      expect(cfb.copySamples(0,2)).toEqual(new Float32Array([1,2]));
+    });
+
+    it('copies empty buffer if requested sample range was overwritten', () => {
+      const cfb = new CircularFrameBuffer(2);
+      cfb.addSamples(new Float32Array([1, 2, 3, 4]), 0, 4);
+      cfb.hop();
+      cfb.hop();
+      cfb.hop();
+      cfb.hop();
+      cfb.addSamples(new Float32Array([5, 6, 7, 8]), 0, 4);
+      expect(cfb.copySamples(0,4)).toEqual(new Float32Array([]));
+    });
+
+    it('copies portion of requested sample range that was not overwritten', () => {
+      const cfb = new CircularFrameBuffer(2);
+      cfb.addSamples(new Float32Array([1, 2, 3, 4]), 0, 4);
+      cfb.hop();
+      cfb.hop();
+      cfb.addSamples(new Float32Array([5, 6]), 0, 2);
+      expect(cfb.copySamples(0,4)).toEqual(new Float32Array([3, 4]));
     });
   });
 });

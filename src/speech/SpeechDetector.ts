@@ -1,3 +1,5 @@
+import { assert } from 'decent-portal';
+
 import CircularFrameBuffer from './CircularFrameBuffer';
 
 /* It would be nice to import this from sl-web-audio, but...
@@ -20,6 +22,7 @@ export type SpeechDetectorOptions = {
   detectSpeechDelayMSecs:number,
   frameDurationMSecs:number,
   speechThresholdMultiplier:number,
+  maximumSpeechDurationMSecs:number,
   onSpeech:SpeechCallback|null,
   onSilence:SilenceCallback|null
 };
@@ -29,6 +32,7 @@ const DEFAULT_OPTIONS:SpeechDetectorOptions = {
   detectSpeechDelayMSecs: 40,
   frameDurationMSecs: 20,
   speechThresholdMultiplier: 20,
+  maximumSpeechDurationMSecs: 10 * 1000,
   onSpeech: null,
   onSilence: null
 };
@@ -41,6 +45,7 @@ function _moveNoiseFloor(frameEnergy:number, currentNoiseFloor:number, minNoiseF
 
 const UNSPECIFIED_NOISE_FLOOR = 0;
 const UNSPECIFIED_TIME = -1;
+const UNSPECIFIED_SAMPLE = -1;
 
 class SpeechDetector {
   _sampleRate:number;
@@ -57,6 +62,8 @@ class SpeechDetector {
   _minNoiseFloor:number;
   _circularFrameBuffer:CircularFrameBuffer;
   _processedSampleCount:number;
+  _startSilenceSampleNo:number;
+  _startSpeechSampleNo:number;
 
   constructor(sampleRate:number, options:Partial<SpeechDetectorOptions> = {}) {
     options = {...DEFAULT_OPTIONS, ...options};
@@ -69,12 +76,13 @@ class SpeechDetector {
     this._sampleRate = sampleRate;
     this._noiseFloor = UNSPECIFIED_NOISE_FLOOR;
     this._isInSpeech = false;
-    this._startSilenceTime = UNSPECIFIED_TIME;
-    this._startSpeechTime = UNSPECIFIED_TIME;
+    this._startSilenceTime = this._startSpeechTime = UNSPECIFIED_TIME;
+    this._startSilenceSampleNo = this._startSpeechSampleNo = UNSPECIFIED_SAMPLE;
     this._frameSampleCount = mSecsToSampleCount(frameDurationMSecs, sampleRate);
     this._minNoiseFloor = 1 / sampleRate;
     if (this._frameSampleCount % 2 === 1) ++this._frameSampleCount; // Make it even so that frame hops can be half.
-    this._circularFrameBuffer = new CircularFrameBuffer(this._frameSampleCount);
+    const totalSampleCount = mSecsToSampleCount(options.maximumSpeechDurationMSecs!, sampleRate) + this._frameSampleCount;
+    this._circularFrameBuffer = new CircularFrameBuffer(this._frameSampleCount, totalSampleCount);
     this._processedSampleCount = 0;
   }
 
@@ -83,7 +91,7 @@ class SpeechDetector {
     while(true) {
       if (!this._circularFrameBuffer.isFrameAvailable) {
         const availableSampleCount = samples.length - sampleReadOffset;
-        const addCount = Math.min(availableSampleCount, this._circularFrameBuffer.availableSpaceCount);
+        const addCount = Math.min(availableSampleCount, this._circularFrameBuffer.availableWriteSpace);
         if (addCount < 1) return;
         this._circularFrameBuffer.addSamples(samples, sampleReadOffset, addCount);
         sampleReadOffset += addCount;
@@ -94,10 +102,13 @@ class SpeechDetector {
       
       if (!this._isInSpeech) this._noiseFloor = _moveNoiseFloor(frameEnergy, this._noiseFloor, this._minNoiseFloor);
       const speechThreshold = this._noiseFloor * this._speechThresholdMultiplier;
-      const isFrameAboveSpeechThreshold = frameEnergy > speechThreshold;
       
-      if (isFrameAboveSpeechThreshold) {
+      if (frameEnergy > speechThreshold) {
         this._startSilenceTime = UNSPECIFIED_TIME;
+        if (this._startSpeechSampleNo === UNSPECIFIED_SAMPLE) {
+          this._startSpeechSampleNo = this._circularFrameBuffer.frameSampleNo;
+          this._startSilenceSampleNo = UNSPECIFIED_TIME;
+        }
         if (!this._isInSpeech) {
           const now = sampleCountToMSecs(this._processedSampleCount - this._frameSampleCount, this._sampleRate);
           if (this._startSpeechTime === UNSPECIFIED_TIME) this._startSpeechTime = now;
@@ -110,6 +121,7 @@ class SpeechDetector {
         }
       } else {
         this._startSpeechTime = UNSPECIFIED_TIME;
+        if (this._startSilenceSampleNo === UNSPECIFIED_SAMPLE) this._startSilenceSampleNo = this._circularFrameBuffer.frameSampleNo;
         if (this._isInSpeech) {
           const now = sampleCountToMSecs(this._processedSampleCount - this._frameSampleCount, this._sampleRate);
           if (this._startSilenceTime === -1) this._startSilenceTime = now;
@@ -118,8 +130,10 @@ class SpeechDetector {
             this._isInSpeech = false;
             this._startSilenceTime = UNSPECIFIED_TIME;
             if (this._onSilence) {
-              const precedingSpeechSamples = new Float32Array(0); // TODO: Buffer preceding speech samples.
+              assert(this._startSpeechSampleNo > 0 && this._startSilenceSampleNo >= this._startSpeechSampleNo);
+              const precedingSpeechSamples = this._circularFrameBuffer.copySamples(this._startSpeechSampleNo, this._startSilenceSampleNo);
               this._onSilence(precedingSpeechSamples);
+              this._startSilenceSampleNo = this._startSpeechSampleNo = UNSPECIFIED_SAMPLE;
             }
           }
         }
