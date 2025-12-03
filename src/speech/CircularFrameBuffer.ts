@@ -91,6 +91,7 @@ class CircularFrameBuffer {
   public get availableWriteSpace():number { return this._buffer.length - this.availableFrameSampleCount; } 
   public get isFrameAvailable():boolean { return this.availableFrameSampleCount >= this._frameSampleCount; }
   public get frameSampleNo():number { return this._startFrameSampleNo; }
+  public get frameSampleCount():number { return this._frameSampleCount; }
 }
 
 export default CircularFrameBuffer;

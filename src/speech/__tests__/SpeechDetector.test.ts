@@ -43,10 +43,18 @@ describe('SpeechDetector', () => {
     });
 
     it('uses leftover samples from first call to processAudioSamples() in second call', () => {
-      const sd = new SpeechDetector(200); // double to make hop size of 2 samples
+      const sd = new SpeechDetector(200, {maximumSpeechDurationMSecs:40}); // double sample rate to make hop size of 2 samples
       sd.processAudioSamples(new Float32Array([1,1,1,1, 0]));
       expect(sd.noiseFloor).toEqual(4);
       sd.processAudioSamples(new Float32Array([0]));
+      expect(sd.noiseFloor).toBeGreaterThan(0);
+      expect(sd.noiseFloor).toBeLessThan(4);
+    });
+
+    it('processes more samples than can fit in the buffer at one time', () => {
+      const sd = new SpeechDetector(200, {maximumSpeechDurationMSecs:40}); // double sample rate to make hop size of 2 samples
+      sd.processAudioSamples(new Float32Array([1,1,1,1, 1,1,1]));
+      sd.processAudioSamples(new Float32Array([1, 0,0,0,0, 0,0,0,0, 0,0,0]));
       expect(sd.noiseFloor).toBeGreaterThan(0);
       expect(sd.noiseFloor).toBeLessThan(4);
     });
@@ -151,6 +159,14 @@ describe('SpeechDetector', () => {
       sd.processAudioSamples(new Float32Array([1,1])); // silence continues beyond 20ms delay.
       expect(receivedSamples).not.toBeNull();
       expect(receivedSamples).toEqual(new Float32Array([1,10,10]));
+    });
+
+    it('processes silence without error when onSilence callback is null', () => {
+      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, detectSilenceDelayMSecs: 20, detectSpeechDelayMSecs: 0});
+      sd.processAudioSamples(new Float32Array([1,1,10,10])); // initial silence followed by speech
+      sd.processAudioSamples(new Float32Array([1,1])); // silence starts
+      sd.processAudioSamples(new Float32Array([1,1])); // silence continues beyond 20ms delay.
+      // Contrived to hit an execution path without onSilence defined. Not much to test here.
     });
   });
 });

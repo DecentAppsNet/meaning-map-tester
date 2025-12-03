@@ -1,4 +1,4 @@
-import { Microphone } from "sl-web-audio"
+import { Microphone, sampleCountToMSecs } from "sl-web-audio"
 import SpeechDetector from "./SpeechDetector";
 
 type ReceiveTextCallback = (text:string) => void;
@@ -21,7 +21,10 @@ export async function initSpeechToText(onReceiveText:ReceiveTextCallback) {
   const microphone = new Microphone(_onReceiveAudio);
   await microphone.init();
   const speechDetector = new SpeechDetector(microphone.sampleRate, {
-    onSilence:() => {console.log('silence ' + performance.now());},
+    onSilence:(speechSamples:Float32Array) => {
+      const duration = sampleCountToMSecs(speechSamples.length, microphone.sampleRate);
+      console.log(`silence preceded by ${duration} msecs of speech`);
+    },
     onSpeech:() => {console.log('speech ' + performance.now());},
   });
   theState = { microphone, speechDetector, onReceiveText};

@@ -233,5 +233,79 @@ describe('CircularFrameBuffer', () => {
       cfb.addSamples(new Float32Array([5, 6]), 0, 2);
       expect(cfb.copySamples(0,4)).toEqual(new Float32Array([3, 4]));
     });
+
+    it('copies samples that wrap around buffer end', () => {
+      const cfb = new CircularFrameBuffer(4, 10);
+      cfb.addSamples(new Float32Array([1,1,1,1, 2,2,2,2]), 0, 8);
+      cfb.hop();
+      cfb.hop();
+      cfb.addSamples(new Float32Array([3,3,3,3]), 0, 4);
+      expect(cfb.copySamples(0, 12)).toEqual(new Float32Array([1,1, 2,2,2,2, 3,3,3,3]));
+    });
+  });
+
+  describe('available write space', () => {
+    it('begins at size of buffer to start', () => {
+      const cfb = new CircularFrameBuffer(4, 10);
+      expect(cfb.availableWriteSpace).toBe(10);
+    });
+
+    it('increases as samples are hopped over', () => {
+      const cfb = new CircularFrameBuffer(4);
+      cfb.addSamples(new Float32Array([1, 1, 1, 1, 2, 2, 2, 2]), 0, 8);
+      expect(cfb.availableWriteSpace).toBe(0);
+      cfb.hop();
+      expect(cfb.availableWriteSpace).toBe(2);
+      cfb.hop();
+      expect(cfb.availableWriteSpace).toBe(4);
+    });
+  });
+
+  describe('frame sample count', () => {
+    it('returns frame sample count given at construction', () => {
+      const cfb = new CircularFrameBuffer(12);
+      expect(cfb.frameSampleCount).toBe(12);
+    });
+  });
+
+  describe('hop sample count', () => {
+    it('returns hop sample count of half frame size', () => {
+      const cfb = new CircularFrameBuffer(12);
+      expect(cfb.hopSampleCount).toBe(6);
+    });
+  });
+
+  describe('frame sample number', () => {
+    it('returns zero at construction', () => {
+      const cfb = new CircularFrameBuffer(4);
+      expect(cfb.frameSampleNo).toBe(0);
+    });
+
+    it('returns correct sample number after hops', () => {
+      const cfb = new CircularFrameBuffer(4);
+      cfb.addSamples(new Float32Array([1, 1, 1, 1, 2, 2, 2, 2]), 0, 8);
+      expect(cfb.frameSampleNo).toBe(0);
+      cfb.hop();
+      expect(cfb.frameSampleNo).toBe(2);
+      cfb.hop();
+      expect(cfb.frameSampleNo).toBe(4);
+    });
+
+    it('returns correct sample number after wrapping hops', () => {
+      const cfb = new CircularFrameBuffer(4, 8);
+      cfb.addSamples(new Float32Array([1, 1, 1, 1, 2, 2, 2, 2]), 0, 8);
+      expect(cfb.frameSampleNo).toBe(0);
+      cfb.hop();
+      expect(cfb.frameSampleNo).toBe(2);
+      cfb.hop();
+      expect(cfb.frameSampleNo).toBe(4);
+      cfb.addSamples(new Float32Array([3, 3, 3, 3]), 0, 4);
+      cfb.hop();
+      expect(cfb.frameSampleNo).toBe(6);
+      cfb.hop();
+      expect(cfb.frameSampleNo).toBe(8);
+      cfb.hop();
+      expect(cfb.frameSampleNo).toBe(10);
+    });
   });
 });
