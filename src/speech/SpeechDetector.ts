@@ -1,5 +1,3 @@
-import { assert } from 'decent-portal';
-
 import CircularFrameBuffer from './CircularFrameBuffer';
 
 /* It would be nice to import this from sl-web-audio, but...
@@ -45,7 +43,6 @@ function _moveNoiseFloor(frameEnergy:number, currentNoiseFloor:number, minNoiseF
 
 const UNSPECIFIED_NOISE_FLOOR = 0;
 const UNSPECIFIED_TIME = -1;
-const UNSPECIFIED_SAMPLE = -1;
 
 class SpeechDetector {
   _sampleRate:number;
@@ -97,7 +94,7 @@ class SpeechDetector {
       const frameEnergy = this._circularFrameBuffer.calcFrameEnergy();
       this._processedSampleCount = this._processedSampleCount === 0 ? this._frameSampleCount : this._processedSampleCount + this._circularFrameBuffer.hopSampleCount;
       
-      if (!this._isInSpeech) this._noiseFloor = _moveNoiseFloor(frameEnergy, this._noiseFloor, this._minNoiseFloor);
+      if (!this._isInSpeech) this._noiseFloor = _moveNoiseFloor(frameEnergy, this._noiseFloor, this._minNoiseFloor); // Doesn't make sense to update noise floor during speech -- too much variation.
       const speechThreshold = this._noiseFloor * this._speechThresholdMultiplier;
       
       if (frameEnergy > speechThreshold) {
@@ -120,7 +117,7 @@ class SpeechDetector {
             this._isInSpeech = false;
             if (this._onSilence) {
               const startSpeechSampleNo = mSecsToSampleCount(this._startSpeechTime, this._sampleRate);
-              const startSilenceSampleNo = mSecsToSampleCount(this._startSilenceTime, this._sampleRate);
+              const startSilenceSampleNo = mSecsToSampleCount(this._startSilenceTime + this._frameSampleCount, this._sampleRate); // The +frameSampleCount is to include the last frame that fell below threshold, but maybe still had the end of speech. Without it, ends of words are truncated.
               const precedingSpeechSamples = this._circularFrameBuffer.copySamples(startSpeechSampleNo, startSilenceSampleNo);
               this._onSilence(precedingSpeechSamples);
             }

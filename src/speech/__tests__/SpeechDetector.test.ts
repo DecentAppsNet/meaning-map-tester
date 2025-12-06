@@ -150,6 +150,19 @@ describe('SpeechDetector', () => {
       expect(speechFireCount).toEqual(1);
     });
 
+    it('ignoress a too-short speech period during silence', () => {
+      let speechFireCount = 0, silenceFireCount = 0;
+      function onSpeech() { speechFireCount++; }
+      function onSilence() { silenceFireCount++; }
+      const sd = new SpeechDetector(100, {speechThresholdMultiplier: 2, detectSilenceDelayMSecs: 0, detectSpeechDelayMSecs: 40, onSpeech, onSilence});
+      sd.processAudioSamples(new Float32Array([1,1,10,10])); // initial silence followed by short blip of energy above speech threshold
+      expect(silenceFireCount).toEqual(0);
+      expect(speechFireCount).toEqual(0);
+      sd.processAudioSamples(new Float32Array([1,1])); // silence continues
+      expect(silenceFireCount).toEqual(0);
+      expect(speechFireCount).toEqual(0);
+    });
+
     it('provides preceding speech samples to onSilence callback', () => {
       let receivedSamples:Float32Array|null = null;
       function onSilence(samples:Float32Array) { receivedSamples = samples; }
