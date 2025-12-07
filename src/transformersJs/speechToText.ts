@@ -1,6 +1,6 @@
 import { assert } from 'decent-portal';
 
-import { pipeline, AutomaticSpeechRecognitionPipeline, AutomaticSpeechRecognitionOutput } from '@xenova/transformers';
+import { pipeline, AutomaticSpeechRecognitionPipeline } from '@xenova/transformers';
 
 let thePipeline:AutomaticSpeechRecognitionPipeline|null = null;
 
@@ -33,11 +33,11 @@ export async function speechToText(samples:Float32Array, sampleRate:number):Prom
   const samples16 = _resampleTo16kHz(samples, sampleRate);
 
   // Run the model
-  const output:AutomaticSpeechRecognitionOutput|AutomaticSpeechRecognitionOutput[] = await thePipeline(samples16, {
+  const output = await thePipeline(samples16, {
     chunk_length_s: 30,
     stride_length_s: 5,
     return_timestamps: false,
   });
 
-  return output.text;
+  return (output as unknown as any).text ?? ''; // I guess typings are broken, because .text exists at runtime.
 }
