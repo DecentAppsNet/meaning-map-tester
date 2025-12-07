@@ -1,3 +1,5 @@
+import { assert } from 'decent-portal';
+
 import { pipeline, AutomaticSpeechRecognitionPipeline, AutomaticSpeechRecognitionOutput } from '@xenova/transformers';
 
 let thePipeline:AutomaticSpeechRecognitionPipeline|null = null;
@@ -7,21 +9,35 @@ export async function initSpeechToText() {
   thePipeline = await pipeline('automatic-speech-recognition', 'Xenova/whisper-base');
 }
 
-export async function speechToText(audioBuffer:AudioBuffer):Promise<string> {
+function _resampleTo16kHz(samples:Float32Array, sampleRate:number):Float32Array {
+  if (sampleRate === 16000) return samples;
+
+  const sampleCount = Math.floor(samples.length * 16000 / sampleRate);
+  const resampled = new Float32Array(sampleCount);
+  for (let i = 0; i < sampleCount; i++) {
+    const srcIndex = i * sampleRate / 16000;
+    const srcIndexInt = Math.floor(srcIndex);
+    const srcIndexFrac = srcIndex - srcIndexInt;
+    const sample1 = samples[srcIndexInt] || 0;
+    const sample2 = samples[srcIndexInt + 1] || 0;
+    resampled[i] = sample1 * (1 - srcIndexFrac) + sample2 * srcIndexFrac;
+    assert(resampled[i] >= -1 && resampled[i] <= 1);
+  }
+  return resampled;
+}
+
+export async function speechToText(samples:Float32Array, sampleRate:number):Promise<string> {
   if (thePipeline === null) throw new Error('SpeechToText not initialized. Call initSpeechToText() first.');
 
-  // Convert AudioBuffer to Float32Array
-  const channelData = audioBuffer.getChannelData(0); // Assuming mono audio
-  const float32Array = new Float32Array(channelData.length);
-  float32Array.set(channelData);
+  // Convert samples to expected format of 16 kHz Float32Array.
+  const samples16 = _resampleTo16kHz(samples, sampleRate);
 
   // Run the model
-  const output:AutomaticSpeechRecognitionOutput|AutomaticSpeechRecognitionOutput[] = await thePipeline(float32Array, {
+  const output:AutomaticSpeechRecognitionOutput|AutomaticSpeechRecognitionOutput[] = await thePipeline(samples16, {
     chunk_length_s: 30,
     stride_length_s: 5,
     return_timestamps: false,
   });
 
-  console.log(JSON.stringify(output, null, 2));
-  return 'text';
+  return output.text;
 }
